@@ -3,7 +3,7 @@ use openssl::symm::{decrypt, encrypt, Cipher};
 use std::{fs, io};
 
 fn main() {
-    let cipher = Cipher::aes_128_cbc();
+    let cipher = Cipher::aes_256_cbc();
     let iv = b"watashiwa kyojin"; // or change acc your needs, doesn't matter
     println!("Welcome to post pwn clarity");
     let keyhash = loop {
@@ -32,10 +32,16 @@ fn main() {
         match input.trim() {
             "1" => {
                 let passdir =
-                    fs::read_dir("./dnames").unwrap_or_else(|e| panic!("No passwords saved"));
+                    match fs::read_dir("./dnames") {
+                        Ok(x) => x,
+                        Err(e) => {
+                            println!("No passwords saved");
+                            continue;
+                        },
+                    };
                 let mut totalpass = 1;
                 for file in passdir {
-                    println!("1. {}", file.unwrap().path().display());
+                    println!("1. {}", file.unwrap().file_name().into_string().unwrap());
                     totalpass += 1;
                 }
                 if totalpass == 1 {
@@ -43,7 +49,7 @@ fn main() {
                     continue;
                 }
 
-                println!("Enter identifying name (domain) of password to read");
+                println!("Enter identifying name (domain) of password to read: ");
                 let mut input = String::new();
                 io::stdin().read_line(&mut input).unwrap();
                 readpassword(input.trim(), &keyhash, cipher, iv);
@@ -56,9 +62,12 @@ fn main() {
                         false
                     }
                 };
-                println!("Enter password to create");
-                let mut input = String::new();
-                io::stdin().read_line(&mut input).unwrap();
+                println!("Enter password identifier (domain): ");
+                let mut inputdomain = String::new();
+                io::stdin().read_line(&mut inputdomain).unwrap();
+                println!("Enter password: ");
+                let inputpass = rpassword::read_password().unwrap();
+                writepassword(inputdomain.trim(), inputpass, &keyhash, cipher, iv);
             }
             _ => {
                 println!("Invalid input");
@@ -66,14 +75,29 @@ fn main() {
         }
     }
 }
-fn readpassword(name: &str, keyhash: &Vec<u8>, cipher: Cipher, iv: &[u8]) {
 
+fn readpassword(name: &str, keyhash: &Vec<u8>, cipher: Cipher, iv: &[u8]) {
+    let unlockpass = verifyPassword(keyhash).unwrap();
+    println!("Trying to read ./dnames/{}", name);
+    //decrypt here
+    let passfile = fs::read(format!("./dnames/{}", name)).unwrap();
+    let pass = decrypter(&passfile, unlockpass.as_bytes(), cipher, iv);
+    println!("Password for {} is: {}", name, pass);
 }
 
-fn verifyPassword(keyhash: Vec<u8>) -> Result<(), String> {
+fn writepassword(name: &str, passsave: String, keyhash: &Vec<u8>, cipher: Cipher, iv: &[u8]) {
+    let unlockpass = verifyPassword(keyhash).unwrap();
+    //encrypt here
+    let enc = encrypter(passsave.as_bytes(), unlockpass.as_bytes(), cipher, iv);
+    fs::write(format!("./dnames/{}", name), enc).unwrap();
+    println!("Written to ./dnames/{}", name);
+}
+
+fn verifyPassword(keyhash: &Vec<u8>) -> Result<String, String> {
+    println!("Enter password: ");
     let password = rpassword::read_password().unwrap();
-    let passwordpadded = format!("{:x<16}", password);
-    if passwordpadded.len() > 16 {
+    let passwordpadded = format!("{:\x31<32}", password);
+    if passwordpadded.len() > 32 {
         println!("Password is too long");
         return Err("Password too long".to_string());
     }
@@ -84,7 +108,7 @@ fn verifyPassword(keyhash: Vec<u8>) -> Result<(), String> {
     });
     if matched {
         println!("Password verified");
-        return Ok(());
+        return Ok(passwordpadded);
     } else {
         return Err("Password incorrect".to_string());
     }
@@ -93,11 +117,11 @@ fn verifyPassword(keyhash: Vec<u8>) -> Result<(), String> {
 fn keycreator() {
     println!("Welcome to key creator");
     println!("## Do not use any %s at the end");
-    println!("## Password should be smaller than 16 characters");
+    println!("## Password should be smaller than 32 characters");
     let password = rpassword::read_password().unwrap();
-    println!("## Password is {:?}", password);
-    let key = format!("{:x<16}", password);
-    if key.len() > 16 {
+    //println!("## Password is {:?}", password);
+    let key = format!("{:\x31<32}", password);
+    if key.len() > 32 {
         println!("Password is too long");
         return;
     }
@@ -109,10 +133,11 @@ fn keycreator() {
     println!("Key creation successful");
 }
 
-fn dmain() {}
-
-fn decrypter(data: &Vec<u8>, key: &[u8], iv: &[u8]) {
-    let cipher = Cipher::aes_128_cbc();
+fn decrypter(data: &Vec<u8>, key: &[u8], cipher: Cipher, iv: &[u8]) -> String{
     let ciphertext = decrypt(cipher, key, Some(iv), data).unwrap();
-    println!("{}", String::from_utf8(ciphertext).expect("Invalid UTF-8"));
+    return String::from_utf8(ciphertext).expect("Invalid UTF-8 | Different encryption key");
+}
+
+fn encrypter(data: &[u8], key: &[u8], cipher: Cipher, iv: &[u8]) -> Vec<u8> {
+    return encrypt(cipher, key, Some(iv), data).unwrap();
 }
