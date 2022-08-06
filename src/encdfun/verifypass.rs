@@ -24,9 +24,11 @@ pub fn verify_password(keyhash: &Vec<u8>) -> Result<String, String> {
     }
 }
 pub fn key_creator(basepath: &path::PathBuf) {
-    println!("Welcome to Master Password creator");
-    println!("## Do not use any %s at the end");
-    println!("## Password should be <= 32 characters");
+    println!(
+        "Welcome to Master Password creator\n\
+        ## Do not use any %s at the end\n\
+        ## Password should be <= 32 characters"
+    );
     let password = rpassword::read_password().unwrap();
     //println!("## Password is {:?}", password);
     let key = format!("{:\x31<32}", password);
