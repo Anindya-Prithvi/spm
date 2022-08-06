@@ -1,15 +1,18 @@
 use openssl::hash::{hash, MessageDigest};
 use openssl::symm::{decrypt, encrypt, Cipher};
-use std::{fs, io};
+use std::{env, fs, io, path};
 
 fn main() {
+    let mut basepath: path::PathBuf = env::current_exe().unwrap();
+    basepath.pop();
+    println!("{}", basepath.display());
     let cipher = Cipher::aes_256_cbc();
     let iv = b"watashiwa kyojin"; // or change acc your needs, doesn't matter
     println!("Welcome to post pwn clarity");
     let keyhash = loop {
-        let val = match fs::read("key.txt") {
+        let val = match fs::read(format!("{}/key.txt", basepath.display())) {
             Ok(x) => Some(x),
-            Err(e) => {
+            Err(_) => {
                 println!("key doesn't exist yet");
                 None
             }
@@ -18,11 +21,11 @@ fn main() {
         if let Some(x) = val {
             break x;
         } else {
-            keycreator();
+            key_creator(&basepath);
         }
     };
     // println!("keyhash: {:?}", keyhash);
-    // verifyPassword(keyhash).unwrap();
+    // verify_password(keyhash).unwrap();
     println!("## Entering infinite loop");
     // add function to add passwords
     loop {
@@ -31,14 +34,13 @@ fn main() {
         io::stdin().read_line(&mut input).unwrap();
         match input.trim() {
             "1" => {
-                let passdir =
-                    match fs::read_dir("./dnames") {
-                        Ok(x) => x,
-                        Err(e) => {
-                            println!("No passwords saved");
-                            continue;
-                        },
-                    };
+                let passdir = match fs::read_dir(format!("{}/dnames", basepath.display())) {
+                    Ok(x) => x,
+                    Err(_) => {
+                        println!("No passwords saved");
+                        continue;
+                    }
+                };
                 let mut totalpass = 1;
                 for file in passdir {
                     println!("1. {}", file.unwrap().file_name().into_string().unwrap());
@@ -52,13 +54,13 @@ fn main() {
                 println!("Enter identifying name (domain) of password to read: ");
                 let mut input = String::new();
                 io::stdin().read_line(&mut input).unwrap();
-                readpassword(input.trim(), &keyhash, cipher, iv);
+                read_password(input.trim(), &keyhash, &cipher, iv, &basepath);
             }
             "2" => {
-                let success = match fs::read_dir("./dnames") {
-                    Ok(x) => true,
-                    Err(e) => {
-                        fs::create_dir("./dnames").unwrap();
+                match fs::read_dir(format!("{}/dnames", basepath.display())) {
+                    Ok(_) => true,
+                    Err(_) => {
+                        fs::create_dir(format!("{}/dnames", basepath.display())).unwrap();
                         false
                     }
                 };
@@ -67,7 +69,14 @@ fn main() {
                 io::stdin().read_line(&mut inputdomain).unwrap();
                 println!("Enter password: ");
                 let inputpass = rpassword::read_password().unwrap();
-                writepassword(inputdomain.trim(), inputpass, &keyhash, cipher, iv);
+                write_password(
+                    inputdomain.trim(),
+                    &inputpass,
+                    &keyhash,
+                    &cipher,
+                    iv,
+                    &basepath,
+                );
             }
             _ => {
                 println!("Invalid input");
@@ -76,25 +85,38 @@ fn main() {
     }
 }
 
-fn readpassword(name: &str, keyhash: &Vec<u8>, cipher: Cipher, iv: &[u8]) {
-    let unlockpass = verifyPassword(keyhash).unwrap();
-    println!("Trying to read ./dnames/{}", name);
+fn read_password(
+    name: &str,
+    keyhash: &Vec<u8>,
+    cipher: &Cipher,
+    iv: &[u8],
+    basepath: &path::PathBuf,
+) {
+    let unlockpass = verify_password(keyhash).unwrap();
+    println!("Trying to read {}/dnames/{}", basepath.display(), name);
     //decrypt here
-    let passfile = fs::read(format!("./dnames/{}", name)).unwrap();
+    let passfile = fs::read(format!("{}/dnames/{}", basepath.display(), name)).unwrap();
     let pass = decrypter(&passfile, unlockpass.as_bytes(), cipher, iv);
     println!("Password for {} is: {}", name, pass);
 }
 
-fn writepassword(name: &str, passsave: String, keyhash: &Vec<u8>, cipher: Cipher, iv: &[u8]) {
-    let unlockpass = verifyPassword(keyhash).unwrap();
+fn write_password(
+    name: &str,
+    passsave: &String,
+    keyhash: &Vec<u8>,
+    cipher: &Cipher,
+    iv: &[u8],
+    basepath: &path::PathBuf,
+) {
+    let unlockpass = verify_password(keyhash).unwrap();
     //encrypt here
     let enc = encrypter(passsave.as_bytes(), unlockpass.as_bytes(), cipher, iv);
-    fs::write(format!("./dnames/{}", name), enc).unwrap();
-    println!("Written to ./dnames/{}", name);
+    fs::write(format!("{}/dnames/{}", basepath.display(), name), enc).unwrap();
+    println!("Written to {}/dnames/{}", basepath.display(), name);
 }
 
-fn verifyPassword(keyhash: &Vec<u8>) -> Result<String, String> {
-    println!("Enter password: ");
+fn verify_password(keyhash: &Vec<u8>) -> Result<String, String> {
+    println!("Enter Master Password: ");
     let password = rpassword::read_password().unwrap();
     let passwordpadded = format!("{:\x31<32}", password);
     if passwordpadded.len() > 32 {
@@ -114,10 +136,10 @@ fn verifyPassword(keyhash: &Vec<u8>) -> Result<String, String> {
     }
 }
 
-fn keycreator() {
-    println!("Welcome to key creator");
+fn key_creator(basepath: &path::PathBuf) {
+    println!("Welcome to Master Password creator");
     println!("## Do not use any %s at the end");
-    println!("## Password should be smaller than 32 characters");
+    println!("## Password should be <= 32 characters");
     let password = rpassword::read_password().unwrap();
     //println!("## Password is {:?}", password);
     let key = format!("{:\x31<32}", password);
@@ -126,18 +148,18 @@ fn keycreator() {
         return;
     }
     fs::write(
-        "key.txt",
+        format!("{}/key.txt", basepath.display()),
         hash(MessageDigest::sha512(), key.as_bytes()).unwrap(),
     )
     .unwrap();
     println!("Key creation successful");
 }
 
-fn decrypter(data: &Vec<u8>, key: &[u8], cipher: Cipher, iv: &[u8]) -> String{
-    let ciphertext = decrypt(cipher, key, Some(iv), data).unwrap();
+fn decrypter(data: &Vec<u8>, key: &[u8], cipher: &Cipher, iv: &[u8]) -> String {
+    let ciphertext = decrypt(*cipher, key, Some(iv), data).unwrap();
     return String::from_utf8(ciphertext).expect("Invalid UTF-8 | Different encryption key");
 }
 
-fn encrypter(data: &[u8], key: &[u8], cipher: Cipher, iv: &[u8]) -> Vec<u8> {
-    return encrypt(cipher, key, Some(iv), data).unwrap();
+fn encrypter(data: &[u8], key: &[u8], cipher: &Cipher, iv: &[u8]) -> Vec<u8> {
+    return encrypt(*cipher, key, Some(iv), data).unwrap();
 }
