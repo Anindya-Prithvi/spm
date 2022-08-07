@@ -1,12 +1,14 @@
 use encdfun::inits;
+use encdfun::inits::read_directory;
 use encdfun::verifypass::key_creator;
 use encdfun::{decfuns::read_password, encfuns::write_password};
 use openssl::symm::Cipher;
-use std::{env, fs, path};
+use std::{env, fs, io, path};
+
 pub mod encdfun;
 
 fn main() {
-    let mut basepath: path::PathBuf = env::current_exe().unwrap();
+    let mut basepath: path::PathBuf = env::current_exe().unwrap(); //necessary panic
     basepath.pop();
     let cipher = Cipher::aes_256_cbc();
     let iv = b"watashiwa kyojin"; // or change acc your needs, doesn't matter
@@ -31,6 +33,20 @@ fn main() {
     let totalargs = args.len();
     if totalargs > 1 {
         match args[1].as_str() {
+            "--list" | "-l" => {
+                match read_directory(&basepath) {
+                    Ok(_) => {
+                        println!("Enter identifying name (domain) of password to read: ");
+                        let mut input = String::new();
+                        io::stdin().read_line(&mut input).unwrap();
+                        read_password(input.trim(), &keyhash, &cipher, iv, &basepath);
+                    }
+                    Err(e) => {
+                        println!("{}", e);
+                        return;
+                    }
+                };
+            }
             "--read" | "-r" => {
                 println!("Reading mode");
                 if totalargs != 3 {
@@ -55,6 +71,9 @@ fn main() {
                     Usage: To view help menu\n\
                     \tspm -h\n\
                     \tspm --help\n\
+                    Usage: To list all identifiers\n\
+                    \tspm -l\n\
+                    \tspm --list\n\
                     Usage: To read directly (non interactive)\n\
                     \tspm --read <identifier>\n\
                     \tspm -r <identifier>\n\
