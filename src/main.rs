@@ -3,7 +3,7 @@ use encdfun::inits::read_directory;
 use encdfun::verifypass::key_creator;
 use encdfun::{decfuns::read_password, encfuns::write_password};
 use openssl::symm::Cipher;
-use std::{env, fs, io, path};
+use std::{env, fs, path};
 
 pub mod encdfun;
 
@@ -36,10 +36,7 @@ fn main() {
             "--list" | "-l" => {
                 match read_directory(&basepath) {
                     Ok(_) => {
-                        println!("Enter identifying name (domain) of password to read: ");
-                        let mut input = String::new();
-                        io::stdin().read_line(&mut input).unwrap();
-                        read_password(input.trim(), &keyhash, &cipher, iv, &basepath);
+                        return;
                     }
                     Err(e) => {
                         println!("{}", e);
