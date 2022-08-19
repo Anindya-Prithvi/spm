@@ -1,9 +1,10 @@
 use clap::{Arg, Command};
 use encdfun::inits;
-use encdfun::inits::read_directory;
+use encdfun::inits::{init_dir, read_directory};
 use encdfun::verifypass::key_creator;
 use encdfun::{decfuns::read_password, encfuns::write_password};
 use openssl::symm::Cipher;
+use std::io::ErrorKind;
 use std::{env, fs, path};
 
 pub mod encdfun;
@@ -11,6 +12,16 @@ pub mod encdfun;
 fn main() {
     let mut basepath: path::PathBuf = env::current_exe().unwrap(); //necessary panic
     basepath.pop(); // fix permission issues, but that may platform restrict
+
+    match init_dir(&basepath) {
+        Ok(_) => {}
+        Err(e) => {
+            if e.kind() != ErrorKind::AlreadyExists {
+                println!("Attempted to create at {}", basepath.display());
+                return;
+            }
+        }
+    }
 
     let cipher = Cipher::aes_256_cbc();
     let iv = b"watashiwa kyojin"; // or change acc your needs, doesn't matter

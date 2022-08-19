@@ -4,7 +4,9 @@ use openssl::symm::Cipher;
 use std::io::Error;
 use std::{fs, io, path};
 
-//unwraps in this files are panics which "should" panic imo
+pub fn init_dir(basepath: &path::PathBuf) -> Result<(), Error> {
+    fs::create_dir(format!("{}/dnames", basepath.display()))
+}
 
 pub fn interact(basepath: &path::PathBuf, keyhash: &Vec<u8>, cipher: &Cipher, iv: &[u8]) {
     println!("1. Read password\n2. Create Password\nEnter 1 or 2: ");
