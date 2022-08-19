@@ -1,10 +1,12 @@
 [package]
 name = "spm"
-version = "0.1.6"
+version = "0.2.0"
 edition = "2021"
+authors = ["Anindya <anindya20024@iiitd.ac.in>"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+clap = { version = "3.2.17", features = ["derive", "cargo"] }
 openssl = { version = "0.10", features = ["vendored"] }
 rpassword = "7.0.0"

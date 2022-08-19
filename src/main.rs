@@ -1,3 +1,4 @@
+use clap::{Arg, Command};
 use encdfun::inits;
 use encdfun::inits::read_directory;
 use encdfun::verifypass::key_creator;
@@ -9,10 +10,12 @@ pub mod encdfun;
 
 fn main() {
     let mut basepath: path::PathBuf = env::current_exe().unwrap(); //necessary panic
-    basepath.pop();
+    basepath.pop(); // fix permission issues, but that may platform restrict
+
     let cipher = Cipher::aes_256_cbc();
     let iv = b"watashiwa kyojin"; // or change acc your needs, doesn't matter
-    println!("Welcome to post pwn clarity");
+
+    // login keys
     let keyhash = loop {
         let val = match fs::read(format!("{}/key.txt", basepath.display())) {
             Ok(x) => Some(x),
@@ -29,65 +32,71 @@ fn main() {
         }
     };
 
-    let args: Vec<String> = env::args().collect();
-    let totalargs = args.len();
-    if totalargs > 1 {
-        match args[1].as_str() {
-            "--list" | "-l" => {
-                match read_directory(&basepath) {
-                    Ok(_) => {
-                        return;
-                    }
-                    Err(e) => {
-                        println!("{}", e);
-                        return;
-                    }
-                };
+    let cli_opts = Command::new("Safe Password Manager")
+        .about("Yet another password manager, but with CLI made in rust.")
+        .arg(
+            Arg::new("list")
+                .short('l')
+                .long("list")
+                .takes_value(false)
+                .help("Lists all available password identifiers"),
+        )
+        .arg(
+            Arg::new("read")
+                .short('r')
+                .long("read")
+                .takes_value(true)
+                .help("print a password given file")
+                .value_name("IDENTIFIER"),
+        )
+        .arg(
+            Arg::new("write")
+                .short('w')
+                .long("write")
+                .takes_value(true)
+                .help(
+                    "writes a password on the disk [encrypted]. \
+                Value of password accepted while running the program.",
+                )
+                .value_name("IDENTIFIER"),
+        )
+        .after_help(
+            "Longer explanation to appear after the options when \
+                 displaying the help information from --help or -h",
+        )
+        .version(clap::crate_version!())
+        .author(clap::crate_authors!())
+        .get_matches();
+
+    if cli_opts.args_present() {
+        match cli_opts.try_get_one::<String>("read") {
+            Ok(x) => {
+                if x != None {
+                    read_password(x.unwrap(), &keyhash, &cipher, iv, &basepath);
+                }
             }
-            "--read" | "-r" => {
-                println!("Reading mode");
-                if totalargs != 3 {
-                    println!("Invalid syntax: Correction --> spm --read <identifier>");
+            Err(_) => (),
+        }
+        match cli_opts.try_get_one::<String>("write") {
+            Ok(x) => {
+                if x != None {
+                    println!("Enter the password you want to save:");
+                    let savpass = rpassword::read_password().unwrap();
+                    write_password(x.unwrap(), &savpass, &keyhash, &cipher, iv, &basepath);
+                }
+            }
+            Err(_) => (),
+        }
+        if cli_opts.contains_id("list") {
+            match read_directory(&basepath) {
+                Ok(_) => {
                     return;
                 }
-                read_password(args[2].as_str(), &keyhash, &cipher, iv, &basepath);
-                return;
-            }
-            "--write" | "-w" => {
-                println!("Writing mode. Spaces in password disallowed");
-                if totalargs != 4 {
-                    println!("Invalid syntax: Correction --> spm --write <identifier> <password>");
+                Err(e) => {
+                    println!("{}", e);
                     return;
                 }
-                write_password(args[2].as_str(), &args[3], &keyhash, &cipher, iv, &basepath);
-                return;
-            }
-            "--help" | "-h" => {
-                println!(
-                    "\
-                    Usage: To view help menu\n\
-                    \tspm -h\n\
-                    \tspm --help\n\
-                    Usage: To list all identifiers\n\
-                    \tspm -l\n\
-                    \tspm --list\n\
-                    Usage: To read directly (non interactive)\n\
-                    \tspm --read <identifier>\n\
-                    \tspm -r <identifier>\n\
-                    Usage: To write directly (non interactive)\n\
-                    \tspm --write <identifier> <password>\n\
-                    \tspm -w <identifier> <password>\n\
-                    For additional security, you can delete {}/key.txt\n\
-                    but be SURE to keep the creation(Master) password same",
-                    basepath.display()
-                );
-            }
-            _ => {
-                println!("Invalid options\n Falling back to Interactive mode:");
-                loop {
-                    inits::interact(&basepath, &keyhash, &cipher, iv);
-                }
-            }
+            };
         }
     } else {
         println!("Welcome to interactive mode");
